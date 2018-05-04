@@ -3,16 +3,57 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gomodule/redigo/redis"
 	"github.com/gorilla/mux"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
 
-func CreateChannel(w http.ResponseWriter, _ *http.Request) {
+type Channel struct {
+	Name string `json:"name"`
+}
+
+type ChannelMessage struct {
+	Channel string `json:"channel"`
+	Body    string `json:"body"`
+}
+
+var (
+	database = redis.DialDatabase(0)
+)
+
+func CreateChannel(w http.ResponseWriter, r *http.Request) {
+	conn, err := redis.Dial("tcp", ":6379", database)
+	defer conn.Close()
+	if err != nil {
+		fmt.Fprintf(w, "channel not created")
+		return
+	}
+
+	var channel Channel
+
+	body, err := ioutil.ReadAll(r.Body)
+	err = json.Unmarshal(body, &channel)
+	if err != nil {
+		fmt.Fprintf(w, "unprocessable entity")
+		return
+	}
+
+	_, err = conn.Do("SET", channel.Name, 1)
+	if err != nil {
+		fmt.Fprintf(w, "channel not created")
+		return
+	}
+
 	fmt.Fprintf(w, "channel created!")
 }
+
 func Publish(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprintf(w, "published!")
+	channel := Channel{Name: "Test"}
+	message := ChannelMessage{Channel: channel.Name}
+
+	json.NewEncoder(w).Encode(message)
 }
 
 func Subscribe(w http.ResponseWriter, _ *http.Request) {
@@ -20,7 +61,10 @@ func Subscribe(w http.ResponseWriter, _ *http.Request) {
 }
 
 func GetMessage(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprintf(w, "get-subscription")
+	channel := Channel{Name: "Test"}
+	message := ChannelMessage{Channel: channel.Name, Body: "Works"}
+
+	json.NewEncoder(w).Encode(message)
 }
 
 func main() {
@@ -29,5 +73,6 @@ func main() {
 	router.HandleFunc("/publish", Publish).Methods("POST")
 	router.HandleFunc("/subscribe", Subscribe).Methods("POST")
 	router.HandleFunc("/subscribe/{channel}/message", GetMessage).Methods("GET")
+
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
