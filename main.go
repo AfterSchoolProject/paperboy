@@ -27,7 +27,7 @@ func CreateChannel(w http.ResponseWriter, r *http.Request) {
 	conn, err := redis.Dial("tcp", ":6379", database)
 	defer conn.Close()
 	if err != nil {
-		fmt.Fprintf(w, "channel not created")
+		fmt.Fprintf(w, "Server not available")
 		return
 	}
 
@@ -50,10 +50,27 @@ func CreateChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func Publish(w http.ResponseWriter, _ *http.Request) {
-	channel := Channel{Name: "Test"}
-	message := ChannelMessage{Channel: channel.Name}
+	conn, err := redis.Dial("tcp", ":6379", database)
+	defer conn.Close()
+	if err != nil {
+		fmt.Fprintf(w, "Server not available")
+	}
 
-	json.NewEncoder(w).Encode(message)
+	var message ChannelMessage
+
+	body, err := ioutil.ReadAll(r.Body)
+	err = json.Unmarshal(body, &message)
+	if err != nil {
+		fmt.Fprintf(w, "unprocessable entity")
+	}
+
+	available = conn.Do("GET", message.Channel)
+	if available == nil {
+		fmt.Fprintf(w, "channel not yet created")
+	} else {
+		conn.Do("SADD", message.Channel, message.Body)
+		fmt.Fprintf(w, "message published")
+	}
 }
 
 func Subscribe(w http.ResponseWriter, _ *http.Request) {
