@@ -14,6 +14,11 @@ type Channel struct {
 	Name string `json:"name"`
 }
 
+type Subscriber struct {
+	Name        string `json:"name"`
+	ChannelName string `json:"channelName"`
+}
+
 type ChannelMessage struct {
 	Channel string `json:"channel"`
 	Body    string `json:"body"`
@@ -49,7 +54,7 @@ func CreateChannel(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "channel created!")
 }
 
-func Publish(w http.ResponseWriter, _ *http.Request) {
+func Publish(w http.ResponseWriter, r *http.Request) {
 	conn, err := redis.Dial("tcp", ":6379", database)
 	defer conn.Close()
 	if err != nil {
@@ -64,7 +69,7 @@ func Publish(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "unprocessable entity")
 	}
 
-	available = conn.Do("GET", message.Channel)
+	available := conn.Do("GET", message.Channel)
 	if available == nil {
 		fmt.Fprintf(w, "channel not yet created")
 	} else {
@@ -73,15 +78,35 @@ func Publish(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func Subscribe(w http.ResponseWriter, _ *http.Request) {
+func Subscribe(w http.ResponseWriter, r *http.Request) {
+	conn, err := redis.Dial("tcp", ":6379", database)
+	defer conn.Close()
+	if err != nil {
+		fmt.Fprintf(w, "Server not available")
+		return
+	}
+
+	var subscriber Subscriber
+
+	body, err := ioutil.ReadAll(r.Body)
+	err = json.Unmarshal(body, &subscriber)
+	if err != nil {
+		fmt.Fprintf(w, "unprocessable entity")
+	}
+
+	available := conn.Do("GET", subscriber.ChannelName)
+	if available == nil {
+		fmt.Fprintf(w, "channel not yet created")
+		return
+	}
+
+	key = Sprintf("%s:subscribers", subscriber.ChannelName)
+	conn.Do("SADD", key, subscriber.Name)
+
 	fmt.Fprintf(w, "subscribe")
 }
 
 func GetMessage(w http.ResponseWriter, _ *http.Request) {
-	channel := Channel{Name: "Test"}
-	message := ChannelMessage{Channel: channel.Name, Body: "Works"}
-
-	json.NewEncoder(w).Encode(message)
 }
 
 func main() {
